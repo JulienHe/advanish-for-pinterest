@@ -72,13 +72,6 @@ section:last-child {
   cursor: pointer;
 }
 
-.hint {
-  margin: 0 0 6px;
-  font-size: 11px;
-  color: #999;
-  line-height: 1.4;
-}
-
 .field {
   display: flex;
   align-items: center;

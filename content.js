@@ -35,7 +35,7 @@
     for (const [key, { newValue }] of Object.entries(changes)) {
       settings[key] = newValue;
     }
-    applyGridMode();
+    applyGridStyle();
     rescanAll();
   });
 
@@ -273,7 +273,6 @@
       if (matchesKeyword(cell)) return blankPinCell(cell, 'keyword match');
 
       cell.setAttribute(SCANNED_ATTR, 'true');
-      mirrorPinIntoGrid(cell);
     });
 
     if (settings.hideSearchSuggestions) {
@@ -435,162 +434,32 @@
     if (existing) existing.remove();
   }
 
-  // ---------- custom grid overlay (opt-in, replaces native masonry) ----------
-  // Pinterest's Masonry component measures each item's height once at
-  // initial render and never re-measures it afterward (see blankPinCell's
-  // comment above) — an acknowledged limitation of Pinterest's own Gestalt
-  // Masonry component, confirmed from its own docs. That's an inherent
-  // ceiling on how gap-free anything can be while still depending on
-  // Pinterest's own layout engine.
-  //
-  // The only way to get a genuinely gap-free grid is to stop depending on
-  // it: render our own masonry, from scratch, using only non-ad pins, and
-  // never let Pinterest's component know or care that anything was
-  // filtered out.
-  //
-  // We deliberately do NOT move, wrap, or restructure Pinterest's native
-  // grid DOM at all — earlier attempts at restructuring nodes React manages
-  // caused real crashes this session. Instead:
-  //  - the native grid is made invisible via `visibility: hidden` (NOT
-  //    display:none) — this only hides pixels; its layout, scroll
-  //    position, and infinite-scroll triggering (which likely depends on
-  //    an IntersectionObserver on its last items, unaffected by
-  //    visibility) are completely untouched.
-  //  - our own grid is a separate <div> appended to <body> (same proven
-  //    pattern as the hover overlay above), position-synced to sit exactly
-  //    over the native grid's current on-screen location.
-  //  - each mirrored pin is a plain <a href> pointing at the same pin URL
-  //    — Pinterest's own client-side router handles the click normally.
-  //
-  // This is a first pass at a genuinely large feature (a real competing
-  // extension implements the equivalent of this with thousands of lines —
-  // infinite-scroll compatibility shims, resize-settle timing, navigation
-  // caching). Known v1 limitations: column count is computed once at setup
-  // (not live-responsive to window resize), and it activates on whatever
-  // the first role="listitem" grid it finds on the page belongs to (main
-  // feed, search results, or a smaller "related pins" carousel on a single
-  // pin page) rather than specifically targeting the main feed.
+  // ---------- custom grid spacing/column-width (experimental) ----------
+  // Pinterest computes column widths in JS, so this is a best-effort CSS
+  // override on the common pin-wrapper width and card image sizing. It may
+  // stop working if Pinterest changes its layout markup.
 
-  const customGrid = {
-    active: false,
-    container: null, // our own grid <div>, appended to body
-    nativeGrid: null, // the native masonry container we're covering
-    columns: [], // current bottom-Y offset per column, px
-    colWidth: 0,
-    gap: 0,
-    mirrored: new WeakSet() // native cells already mirrored
-  };
-
-  function findNativeGrid() {
-    const anyCell = document.querySelector('[data-grid-item="true"], [role="listitem"]');
-    return anyCell ? anyCell.parentElement : null;
-  }
-
-  function teardownCustomGrid() {
-    if (customGrid.nativeGrid) {
-      customGrid.nativeGrid.classList.remove('parp-native-grid-hidden');
+  let gridStyleTag = null;
+  function applyGridStyle() {
+    if (!gridStyleTag) {
+      gridStyleTag = document.createElement('style');
+      gridStyleTag.id = 'parp-grid-style';
+      document.documentElement.appendChild(gridStyleTag);
     }
-    if (customGrid.container) {
-      customGrid.container.remove();
+    if (!settings.gridEnabled) {
+      gridStyleTag.textContent = '';
+      return;
     }
-    customGrid.active = false;
-    customGrid.container = null;
-    customGrid.nativeGrid = null;
-    customGrid.columns = [];
-    customGrid.mirrored = new WeakSet();
-  }
-
-  function ensureCustomGrid() {
-    if (customGrid.active && customGrid.nativeGrid && customGrid.nativeGrid.isConnected) return true;
-    if (customGrid.active) teardownCustomGrid(); // native grid gone (navigated) — rebuild fresh
-
-    const nativeGrid = findNativeGrid();
-    if (!nativeGrid) return false;
-
-    customGrid.nativeGrid = nativeGrid;
-    nativeGrid.classList.add('parp-native-grid-hidden');
-
-    const container = document.createElement('div');
-    container.className = 'parp-custom-grid';
-    document.body.appendChild(container);
-    customGrid.container = container;
-
-    customGrid.colWidth = Number(settings.gridColumnWidth) || DEFAULTS.gridColumnWidth;
-    customGrid.gap = Number(settings.gridGap) || DEFAULTS.gridGap;
-    const nativeWidth = nativeGrid.getBoundingClientRect().width || customGrid.colWidth;
-    const colCount = Math.max(1, Math.floor((nativeWidth + customGrid.gap) / (customGrid.colWidth + customGrid.gap)));
-    customGrid.columns = new Array(colCount).fill(0);
-
-    customGrid.active = true;
-    syncCustomGridPosition();
-    return true;
-  }
-
-  function syncCustomGridPosition() {
-    if (!customGrid.active || !customGrid.nativeGrid || !customGrid.nativeGrid.isConnected) return;
-    const rect = customGrid.nativeGrid.getBoundingClientRect();
-    customGrid.container.style.top = `${rect.top + window.scrollY}px`;
-    customGrid.container.style.left = `${rect.left + window.scrollX}px`;
-    customGrid.container.style.width = `${rect.width}px`;
-  }
-
-  function mirrorPinIntoGrid(cell) {
-    if (!settings.gridEnabled) return;
-    if (customGrid.mirrored.has(cell)) return;
-    if (cell.hasAttribute(HIDDEN_ATTR)) return; // ad/video/etc — don't mirror
-    if (!ensureCustomGrid()) return;
-    if (!customGrid.nativeGrid.contains(cell)) return; // belongs to a different grid
-
-    const img = cell.querySelector('img');
-    const link = cell.querySelector('a[href]');
-    if (!img || !link) return;
-
-    customGrid.mirrored.add(cell);
-
-    const card = document.createElement('a');
-    card.className = 'parp-custom-grid-card';
-    card.href = link.href;
-
-    const cardImg = document.createElement('img');
-    cardImg.src = img.currentSrc || img.src;
-    cardImg.loading = 'lazy';
-    card.appendChild(cardImg);
-
-    const place = () => {
-      const naturalW = cardImg.naturalWidth || 1;
-      const naturalH = cardImg.naturalHeight || 1;
-      const displayHeight = customGrid.colWidth * (naturalH / naturalW);
-
-      let shortestCol = 0;
-      for (let i = 1; i < customGrid.columns.length; i++) {
-        if (customGrid.columns[i] < customGrid.columns[shortestCol]) shortestCol = i;
+    const w = Number(settings.gridColumnWidth) || DEFAULTS.gridColumnWidth;
+    const g = Number(settings.gridGap) || DEFAULTS.gridGap;
+    gridStyleTag.textContent = `
+      [data-test-id="pinWrapper"], [data-test-id="pin"] {
+        width: ${w}px !important;
       }
-
-      const x = shortestCol * (customGrid.colWidth + customGrid.gap);
-      const y = customGrid.columns[shortestCol];
-
-      card.style.width = `${customGrid.colWidth}px`;
-      card.style.transform = `translate(${x}px, ${y}px)`;
-
-      customGrid.columns[shortestCol] += displayHeight + customGrid.gap;
-      customGrid.container.style.height = `${Math.max(...customGrid.columns)}px`;
-    };
-
-    if (cardImg.complete && cardImg.naturalWidth) {
-      place();
-    } else {
-      cardImg.addEventListener('load', place, { once: true });
-    }
-
-    customGrid.container.appendChild(card);
-  }
-
-  function applyGridMode() {
-    if (settings.gridEnabled) {
-      ensureCustomGrid();
-    } else {
-      teardownCustomGrid();
-    }
+      [data-grid-item] {
+        margin: ${Math.round(g / 2)}px !important;
+      }
+    `;
   }
 
   // ---------- observer ----------
@@ -631,22 +500,10 @@
     if (DEBUG) console.debug('[AdVanish] active settings:', settings);
 
     whenPageReady(() => {
-      applyGridMode();
+      applyGridStyle();
       rescanAll();
       startObserving();
       initHoverDelegation();
-
-      let syncScheduled = false;
-      const scheduleSync = () => {
-        if (syncScheduled) return;
-        syncScheduled = true;
-        requestAnimationFrame(() => {
-          syncScheduled = false;
-          syncCustomGridPosition();
-        });
-      };
-      window.addEventListener('scroll', scheduleSync, { passive: true });
-      window.addEventListener('resize', scheduleSync, { passive: true });
     });
   }
 

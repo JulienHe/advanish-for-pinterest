@@ -186,8 +186,17 @@
   // containers). It had few enough `pin` markers to pass the pin-count
   // check, but hiding it blanked the whole page. Rather than keep guessing
   // Pinterest's naming conventions one exception at a time, guard on actual
-  // subtree size/shape instead: a real small "related content" block won't
-  // carry its own <style> tag or have hundreds of descendant elements.
+  // subtree size instead: a real small "related content" block won't have
+  // hundreds of descendant elements.
+  //
+  // (An earlier version of this guard also refused anything containing a
+  // <style> tag, meant to catch that oversized wrapper. That was too broad:
+  // Pinterest embeds a small <style> tag with video::cue caption rules
+  // inside every video pin, ad or not, so it ended up blocking every video
+  // pin from ever being hidden — including actual video ads. Removed; the
+  // descendant-count check alone catches the oversized-wrapper case, since
+  // that wrapper held the entire page's layout and was far larger than any
+  // single pin card.)
   const MAX_DESCENDANTS_IN_HIDDEN_CONTAINER = 250;
   function isSafeToHide(el) {
     if (!el || el === document.body || el === document.documentElement) return false;
@@ -195,7 +204,6 @@
       '[data-test-id="pin"], [data-test-id="pinWrapper"], [data-test-id^="pin-"]'
     ).length;
     if (pinCount > MAX_PINS_IN_HIDDEN_CONTAINER) return false;
-    if (el.querySelector('style')) return false;
     if (el.querySelectorAll('*').length > MAX_DESCENDANTS_IN_HIDDEN_CONTAINER) return false;
     return true;
   }

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AdVanish for Pinterest</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>AdVanish <span class="subtitle">for Pinterest</span></h1>
+    <label class="switch">
+      <input type="checkbox" id="enabled" />
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <main id="content">
+    <section>
+      <h2>Hide</h2>
+      <label class="row"><input type="checkbox" id="hideAds" /> Ads &amp; promoted pins</label>
+      <label class="row"><input type="checkbox" id="hideSearchSuggestions" /> Search suggestions &amp; related blocks</label>
+      <label class="row"><input type="checkbox" id="hideVideoPins" /> Video pins</label>
+      <label class="row"><input type="checkbox" id="hideShoppablePins" /> Shoppable pins</label>
+    </section>
+
+    <section>
+      <h2>Keyword filter</h2>
+      <div class="keyword-input-row">
+        <input type="text" id="keywordInput" placeholder="Add a keyword…" />
+        <button id="addKeyword">Add</button>
+      </div>
+      <ul id="keywordList"></ul>
+    </section>
+
+    <section>
+      <h2>Grid layout <span class="badge">experimental</span></h2>
+      <label class="row"><input type="checkbox" id="gridEnabled" /> Customize grid</label>
+      <label class="field">
+        Column width (px)
+        <input type="number" id="gridColumnWidth" min="120" max="500" />
+      </label>
+      <label class="field">
+        Spacing (px)
+        <input type="number" id="gridGap" min="0" max="60" />
+      </label>
+    </section>
+  </main>
+
+  <footer>Reload any open Pinterest tab after changing settings.</footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

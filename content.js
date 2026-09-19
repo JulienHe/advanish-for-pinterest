@@ -412,23 +412,31 @@
 
   // ---------- init ----------
 
+  // Wait for the page to fully finish loading before touching the DOM at
+  // all. On a hard refresh, React hydrates the whole page from scratch —
+  // thousands of DOM mutations in quick succession. Our MutationObserver
+  // reacting to those and mutating attributes mid-hydration could trigger a
+  // React hydration mismatch, which can make React abandon rendering
+  // (the white screen seen specifically on hard refresh, not on in-app
+  // navigation, which doesn't re-hydrate).
+  function whenPageReady(cb) {
+    if (document.readyState === 'complete') {
+      cb();
+    } else {
+      window.addEventListener('load', cb, { once: true });
+    }
+  }
+
   async function init() {
     settings = await loadSettings();
     if (DEBUG) console.debug('[AdVanish] active settings:', settings);
-    applyGridStyle();
-    rescanAll();
-    startObserving();
-    initHoverDelegation();
 
-    const bootObserver = new MutationObserver(() => {
-      if (document.body) {
-        rescanAll();
-        bootObserver.disconnect();
-      }
+    whenPageReady(() => {
+      applyGridStyle();
+      rescanAll();
+      startObserving();
+      initHoverDelegation();
     });
-    if (!document.body) {
-      bootObserver.observe(document.documentElement, { childList: true });
-    }
   }
 
   init();

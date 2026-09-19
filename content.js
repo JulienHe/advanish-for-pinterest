@@ -58,19 +58,24 @@
 
   // Walk up from a candidate marker element to the ancestor that represents
   // one full grid cell (the masonry item). Pinterest wraps each pin in a
-  // container carrying role="listitem" or a data-grid-item style attribute
-  // that Pinterest's JS positions absolutely. We hide THAT node, not just the
-  // inner card, so the whole cell's footprint disappears.
-  // Only climb to an explicit list-item marker, and only a few levels up.
-  // The old fallback (any ancestor with inline position:absolute + a
-  // transform) was too broad: on pages like the single-pin view, it could
-  // match a large wrapper that also contains an unrelated sponsored pin
-  // nearby, causing the wrapper — including the real pin — to be hidden as
-  // if it were the ad. When no explicit list-item marker is found nearby,
-  // stick with the marker itself rather than guessing.
+  // container carrying role="listitem" and data-grid-item="true" that
+  // Pinterest's JS positions absolutely (inline transform: translate(...)).
+  // We hide THAT node, not just the inner card, so the whole cell's
+  // footprint is what gets hidden.
+  //
+  // We only match on this explicit, unambiguous marker — never on a vague
+  // heuristic like "has inline position:absolute + a transform", which
+  // previously matched an unrelated oversized wrapper on the single-pin
+  // page. The climb depth was earlier capped at 4 to contain that risk, but
+  // that's too shallow: on a normal feed pin, the real data-grid-item
+  // wrapper sits 5-6 levels above the `pin` marker, so we were hiding an
+  // inner div instead of the actual absolutely-positioned cell — which
+  // still kept its full box, leaving a gap. Climbing further is safe now
+  // that isSafeToHide() independently guards against hiding anything
+  // structurally too large, regardless of how it was found.
   function findGridCell(el) {
     let node = el;
-    for (let i = 0; i < 4 && node; i++) {
+    for (let i = 0; i < 12 && node; i++) {
       if (node.getAttribute && (node.getAttribute('role') === 'listitem' || node.hasAttribute('data-grid-item'))) {
         return node;
       }

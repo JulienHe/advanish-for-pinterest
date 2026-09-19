@@ -76,23 +76,18 @@
     if (!isSafeToHide(cell)) return;
     cell.setAttribute(HIDDEN_ATTR, 'true');
     cell.classList.add('parp-hidden');
-    nudgeLayout();
   }
 
-  // Pinterest's grid is a JS-computed masonry: each cell is absolutely
-  // positioned by Pinterest's own code based on measured heights. Simply
-  // hiding a cell with display:none can leave a gap because Pinterest
-  // doesn't know we removed it. Dispatching resize/scroll nudges Pinterest's
-  // own listeners to recompute positions, which in practice closes the gap
-  // on most Pinterest layouts. This is a best-effort nudge, not a guarantee.
-  let nudgeTimer = null;
-  function nudgeLayout() {
-    if (nudgeTimer) return;
-    nudgeTimer = setTimeout(() => {
-      window.dispatchEvent(new Event('resize'));
-      nudgeTimer = null;
-    }, 150);
-  }
+  // NOTE: we previously dispatched a synthetic window "resize" event here to
+  // nudge Pinterest's masonry into recomputing layout after hiding a cell.
+  // Pinterest's grid is virtualized (it mounts/unmounts pins based on
+  // viewport measurements), and repeatedly firing fake resize events tricked
+  // that virtualization into recalculating constantly — which intermittently
+  // unmounted pins that should have stayed visible (seen as a white screen,
+  // or a pin vanishing right after a hover-triggered DOM mutation elsewhere
+  // on the page retriggered our scan). Removed entirely: display:none alone
+  // is enough to hide a cell, and any leftover gap is a much smaller problem
+  // than corrupting Pinterest's own rendering.
 
   function matchesKeyword(cell) {
     if (!settings.keywords || settings.keywords.length === 0) return false;
@@ -367,7 +362,6 @@
         margin: ${Math.round(g / 2)}px !important;
       }
     `;
-    nudgeLayout();
   }
 
   // ---------- observer ----------

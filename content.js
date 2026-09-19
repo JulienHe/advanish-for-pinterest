@@ -71,6 +71,7 @@
 
   function hideCell(cell) {
     if (!cell || cell.hasAttribute(HIDDEN_ATTR)) return;
+    if (!isSafeToHide(cell)) return;
     cell.setAttribute(HIDDEN_ATTR, 'true');
     cell.classList.add('parp-hidden');
     nudgeLayout();
@@ -134,12 +135,26 @@
     return false;
   }
 
+  // Only match on the element's OWN data-test-id, never on descendant
+  // headings — checking descendants let this match huge ancestor wrappers
+  // (e.g. Pinterest's whole app container, if some deeply nested heading
+  // happened to contain matching text), which hid the entire page.
   function isSearchSuggestionBlock(el) {
     const testId = el.getAttribute && el.getAttribute('data-test-id');
-    if (testId && /related|search-guide|suggestion|more-ideas|more-like-this/i.test(testId)) return true;
-    const heading = el.querySelector && el.querySelector('h1, h2, h3');
-    if (heading && /ideas for you|more like this|related searches|explore more/i.test(textOf(heading))) return true;
-    return false;
+    return !!(testId && /related|search-guide|suggestion|more-ideas|more-like-this/i.test(testId));
+  }
+
+  // Safety net: never hide document root/body, and never hide a container
+  // that itself holds a large number of pins — that's a sign a heuristic
+  // matched an ancestor wrapper instead of a single pin/block, and hiding
+  // it would blank out large parts (or all) of the page.
+  const MAX_PINS_IN_HIDDEN_CONTAINER = 12;
+  function isSafeToHide(el) {
+    if (!el || el === document.body || el === document.documentElement) return false;
+    const pinCount = el.querySelectorAll(
+      '[data-test-id="pin"], [data-test-id="pinWrapper"], [data-test-id^="pin-"]'
+    ).length;
+    return pinCount <= MAX_PINS_IN_HIDDEN_CONTAINER;
   }
 
   // ---------- scanning ----------

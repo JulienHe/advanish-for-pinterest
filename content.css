@@ -2,6 +2,34 @@
   display: none !important;
 }
 
+/* Custom grid mode: native Pinterest masonry stays fully laid out (so its
+   own scroll/infinite-load behavior keeps working) but invisible — our own
+   grid overlay is what's actually shown. */
+.parp-native-grid-hidden {
+  visibility: hidden !important;
+}
+
+.parp-custom-grid {
+  position: absolute;
+  z-index: 1;
+}
+
+.parp-custom-grid-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  text-decoration: none;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.parp-custom-grid-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .parp-overlay-floating {
   position: fixed;
   display: flex;

@@ -12,7 +12,7 @@ clutter on Pinterest, while keeping the masonry grid tidy.
 - Custom keyword filter
 - Hover overlay for previewing a pin at full size or downloading the
   original-resolution image
-- Experimental grid column-width / spacing customization
+- Experimental zero-gap custom grid (opt-in — see below)
 
 ## Install (unpacked, for development)
 
@@ -67,6 +67,39 @@ the page, so this affects Pinterest's own code too), making those methods
 fail gracefully instead of throwing if Pinterest's React code ever reaches
 for one of the small removed media nodes — cheap insurance against a crash
 class we hit while testing full-cell removal.
+
+### Going further: the zero-gap custom grid (opt-in)
+
+Blanking a pin's content avoids a *layout* gap, but the blanked card is
+still visibly present. Getting a genuinely gap-free grid (ads simply never
+existing, visually) requires not depending on Pinterest's Masonry component
+at all — which is exactly what a real competing extension does: reverse
+engineering its packaged `.crx` showed it ships its own full custom grid
+renderer, enabled by default, that completely replaces Pinterest's native
+masonry. In that renderer's own native-mode fallback path, it hides ads
+with plain `display: none` — same technique and same limitation as
+everyone else. The gap-free experience only exists because its custom grid
+is what most users actually see.
+
+This extension's "Zero-gap custom grid" setting (off by default, in the
+popup) is a first pass at the same idea:
+
+- Pinterest's native grid container is never moved, wrapped, or
+  restructured — earlier attempts at DOM restructuring caused real crashes
+  this session. It's made invisible via `visibility: hidden` (not
+  `display: none`), which only hides pixels — its layout, scroll position,
+  and infinite-scroll triggering are completely unaffected.
+- A separate `<div>` is appended to `<body>` (the same pattern already used
+  for the hover-preview overlay), position-synced on scroll/resize to sit
+  exactly over the native grid's on-screen location.
+- Non-ad pins are mirrored into it as plain `<a href>` cards, packed with a
+  simple shortest-column masonry algorithm, using the column width/gap
+  already configurable in the popup.
+
+Known v1 limitations: column count is computed once when the grid is set
+up, not live-responsive to window resizing; and it targets whichever
+`role="listitem"` grid it finds first on the page, which may be a smaller
+"related pins" carousel rather than the main feed on some pages.
 
 ## Project structure
 

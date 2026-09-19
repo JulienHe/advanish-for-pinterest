@@ -495,7 +495,7 @@
     // Find the shared parent of Pinterest's grid cells. Re-checked on every
     // call (cheap) since the container may not exist yet at first call, or
     // may have been replaced by Pinterest's own client-side navigation.
-    const anyCell = document.querySelector('[data-grid-item], [role="listitem"]');
+    const anyCell = document.querySelector('[data-grid-item="true"], [role="listitem"]');
     const container = anyCell ? anyCell.parentElement : null;
     if (!container) return; // will retry on the next rescan
 
@@ -513,7 +513,7 @@
         columns: ${w}px !important;
         column-gap: ${g}px !important;
       }
-      .parp-columns-active > [data-grid-item] {
+      .parp-columns-active > [data-grid-item="true"] {
         position: static !important;
         top: auto !important;
         left: auto !important;

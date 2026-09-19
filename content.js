@@ -14,7 +14,7 @@
     hideShoppablePins: false,
     keywords: [],
     gridEnabled: false,
-    gridColumnWidth: 236, // px, matches Pinterest's default small-column width
+    gridColumnCount: 0, // 0 = auto-derive from the pins' own natural width
     gridGap: 16 // px
   };
 
@@ -505,12 +505,31 @@
     columnsContainer = container;
     columnsContainer.classList.add('parp-columns-active');
 
-    const w = Number(settings.gridColumnWidth) || DEFAULTS.gridColumnWidth;
     const g = Number(settings.gridGap) || DEFAULTS.gridGap;
+
+    // Use column-count (an exact number of columns), not columns:<px> (a
+    // target width the browser fits columns around approximately). With
+    // column-count, each column's width is computed as an exact
+    // 100%/N share of the container — a real percentage, not a fixed px —
+    // and width:100% on each cell below resolves against that column box,
+    // not the outer container, per the CSS multicol spec.
+    //
+    // The count itself is derived from the pin's own natural width
+    // (Pinterest sets an explicit inline `width` on this exact cell, e.g.
+    // "224.2px" — still present in the attribute; we only override the
+    // *rendered* result via this stylesheet, never touch that attribute)
+    // so the resulting column width lands close to what Pinterest was
+    // already showing, unless the user overrides the count explicitly.
+    const containerWidth = container.getBoundingClientRect().width || 1000;
+    const naturalWidth = parseFloat(anyCell.style.width) || anyCell.getBoundingClientRect().width || 236;
+    const columnCount = Number(settings.gridColumnCount) > 0
+      ? Math.round(Number(settings.gridColumnCount))
+      : Math.max(1, Math.round((containerWidth + g) / (naturalWidth + g)));
+
     columnsStyleTag.textContent = `
       .parp-columns-active {
         display: block !important;
-        columns: ${w}px !important;
+        column-count: ${columnCount} !important;
         column-gap: ${g}px !important;
       }
       .parp-columns-active > [data-grid-item="true"] {

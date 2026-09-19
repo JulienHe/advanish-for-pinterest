@@ -77,11 +77,23 @@ The "Zero-gap custom grid" setting takes a different, structurally simpler
 approach: instead of fighting Pinterest's JS-computed absolute positioning,
 override it with CSS so Pinterest's grid cells become normal in-flow
 content inside a native CSS multi-column layout
-(`columns: <width>; column-gap: <gap>;`). Browsers reflow column content
+(`column-count: N; column-gap: <gap>;`). Browsers reflow column content
 automatically on any DOM change — no JS masonry math needed on our side at
 all. With cells back in normal flow, a plain `display: none` on a hidden
 pin genuinely closes the gap, handled entirely by the browser's own layout
 engine.
+
+`column-count` (an exact number of columns) is used rather than
+`columns: <px>` (a target width the browser fits columns around
+approximately), so each column gets a true `100% / N` share of the
+container width — a real percentage, not a fixed px — via
+`width: 100%` on each cell, which the CSS multicol spec resolves against
+the column box, not the outer container. The column count itself is
+auto-derived from the pin's own natural width (still present in Pinterest's
+own inline `style="width: ..."` on that exact cell — never modified,
+only visually overridden), so the resulting column width lands close to
+what Pinterest was already showing rather than an arbitrary typed-in value.
+It can be overridden explicitly in the popup.
 
 This is done as a pure CSS override (an injected stylesheet with
 `!important` rules beating Pinterest's plain inline styles) — it never

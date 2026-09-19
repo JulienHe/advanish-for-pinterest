@@ -6,12 +6,12 @@ const DEFAULTS = {
   hideShoppablePins: false,
   keywords: [],
   gridEnabled: false,
-  gridColumnWidth: 236,
+  gridColumnCount: 0,
   gridGap: 16
 };
 
 const CHECKBOX_KEYS = ['enabled', 'hideAds', 'hideSearchSuggestions', 'hideVideoPins', 'hideShoppablePins', 'gridEnabled'];
-const NUMBER_KEYS = ['gridColumnWidth', 'gridGap'];
+const NUMBER_KEYS = ['gridColumnCount', 'gridGap'];
 
 let state = { ...DEFAULTS };
 

@@ -35,10 +35,10 @@
     <section>
       <h2>Grid layout <span class="badge">experimental</span></h2>
       <label class="row"><input type="checkbox" id="gridEnabled" /> CSS-columns grid (true zero-gap)</label>
-      <p class="hint">Switches Pinterest's grid to native CSS columns so hidden pins are reflowed by the browser itself. Reload the page after enabling.</p>
+      <p class="hint">Switches Pinterest's grid to native CSS columns so hidden pins are reflowed by the browser itself. Each column is an exact 100% / count share of the width. Reload the page after enabling.</p>
       <label class="field">
-        Column width (px)
-        <input type="number" id="gridColumnWidth" min="120" max="500" />
+        Columns (0 = auto)
+        <input type="number" id="gridColumnCount" min="0" max="10" />
       </label>
       <label class="field">
         Spacing (px)

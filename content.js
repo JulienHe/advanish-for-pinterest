@@ -179,12 +179,25 @@
   // matched an ancestor wrapper instead of a single pin/block, and hiding
   // it would blank out large parts (or all) of the page.
   const MAX_PINS_IN_HIDDEN_CONTAINER = 12;
+  // A container we mistakenly matched as "related pins" on the pin detail
+  // page turned out to also hold that page's core layout (it contained a
+  // <style> tag with rules for [data-test-id="closeup-body-style"] and
+  // [data-test-id="closeup-media-container"] — the main pin's own layout
+  // containers). It had few enough `pin` markers to pass the pin-count
+  // check, but hiding it blanked the whole page. Rather than keep guessing
+  // Pinterest's naming conventions one exception at a time, guard on actual
+  // subtree size/shape instead: a real small "related content" block won't
+  // carry its own <style> tag or have hundreds of descendant elements.
+  const MAX_DESCENDANTS_IN_HIDDEN_CONTAINER = 250;
   function isSafeToHide(el) {
     if (!el || el === document.body || el === document.documentElement) return false;
     const pinCount = el.querySelectorAll(
       '[data-test-id="pin"], [data-test-id="pinWrapper"], [data-test-id^="pin-"]'
     ).length;
-    return pinCount <= MAX_PINS_IN_HIDDEN_CONTAINER;
+    if (pinCount > MAX_PINS_IN_HIDDEN_CONTAINER) return false;
+    if (el.querySelector('style')) return false;
+    if (el.querySelectorAll('*').length > MAX_DESCENDANTS_IN_HIDDEN_CONTAINER) return false;
+    return true;
   }
 
   // ---------- scanning ----------

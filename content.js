@@ -89,43 +89,21 @@
   // on; it only prints, never changes behavior.
   const DEBUG = true;
 
-  // Content scripts share the actual DOM API objects with the page (only JS
-  // *variables* are isolated, not built-in browser interfaces), so patching
-  // Node.prototype here also affects Pinterest's own code. This makes
-  // removeChild/insertBefore/replaceChild fail gracefully instead of
-  // throwing when React reaches for a node we already removed — cheap
-  // insurance for blankPinCell() below, which does remove real nodes
-  // (img/video), just small leaf ones rather than a whole grid cell.
-  let removalSafetyPatched = false;
-  function patchNodeRemovalSafety() {
-    if (removalSafetyPatched) return;
-    removalSafetyPatched = true;
-
-    const proto = Node.prototype;
-
-    const originalRemoveChild = proto.removeChild;
-    proto.removeChild = function (child) {
-      if (child.parentNode !== this) return child;
-      return originalRemoveChild.call(this, child);
-    };
-
-    const originalInsertBefore = proto.insertBefore;
-    proto.insertBefore = function (newNode, referenceNode) {
-      if (referenceNode && referenceNode.parentNode !== this) {
-        return originalInsertBefore.call(this, newNode, null);
-      }
-      return originalInsertBefore.call(this, newNode, referenceNode);
-    };
-
-    const originalReplaceChild = proto.replaceChild;
-    proto.replaceChild = function (newChild, oldChild) {
-      if (oldChild.parentNode !== this) {
-        this.appendChild(newChild);
-        return oldChild;
-      }
-      return originalReplaceChild.call(this, newChild, oldChild);
-    };
-  }
+  // NOTE: we previously patched Node.prototype.removeChild/insertBefore/
+  // replaceChild here as defensive insurance for blankPinCell() removing
+  // small <img>/<video> nodes. Removed: content scripts share the actual
+  // DOM API objects with the page, so that patch affected EVERY
+  // removeChild/insertBefore/replaceChild call on the page, including
+  // Pinterest's own internal code for entirely unrelated purposes — not
+  // just our own small removals. It was added defensively for a full
+  // grid-cell-removal experiment that was already reverted, and its actual
+  // necessity for blankPinCell's small leaf-node removals was never
+  // confirmed. After a white screen was reported with default settings
+  // (custom grid mode off) alongside uncaught errors from Pinterest's own
+  // bundle failing to read its own internal data — a plausible sign of
+  // this patch interfering with Pinterest's unrelated internal DOM
+  // operations — it's removed as the highest-blast-radius, least-justified
+  // thing this extension was doing.
 
   // Used for whole-section matches (e.g. the "related pins" module) that
   // aren't individual masonry grid items — plain display:none is fine here
@@ -649,11 +627,6 @@
   }
 
   async function init() {
-    // Patch as early as possible (before React starts hydrating), not
-    // gated behind whenPageReady — it's a no-op until blankPinCell()
-    // actually removes a node.
-    patchNodeRemovalSafety();
-
     settings = await loadSettings();
     if (DEBUG) console.debug('[AdVanish] active settings:', settings);
 

@@ -89,61 +89,17 @@
   // on; it only prints, never changes behavior.
   const DEBUG = true;
 
-  // EXPERIMENTAL: actually remove ad nodes from the DOM instead of hiding
-  // them with display:none. display:none never closes the masonry gap,
-  // because Pinterest positions cells with a precomputed inline transform
-  // that has no way to know a sibling disappeared. True removal gives
-  // Pinterest's own virtualization a chance to notice the child count
-  // changed and relayout — but React still "believes" it manages that
-  // node, and if a later re-render calls removeChild/insertBefore/
-  // replaceChild referencing a node we already deleted, the native DOM API
-  // throws, which can crash React's reconciliation for the whole tree.
-  // Mitigation below: patch those native methods (shared between this
-  // content script's isolated JS world and the page's own — they're
-  // platform APIs, not page-defined) to fail silently/gracefully instead
-  // of throwing when the referenced node is already gone.
-  let removalSafetyPatched = false;
-  function patchNodeRemovalSafety() {
-    if (removalSafetyPatched) return;
-    removalSafetyPatched = true;
-
-    const proto = Node.prototype;
-
-    const originalRemoveChild = proto.removeChild;
-    proto.removeChild = function (child) {
-      if (child.parentNode !== this) return child;
-      return originalRemoveChild.call(this, child);
-    };
-
-    const originalInsertBefore = proto.insertBefore;
-    proto.insertBefore = function (newNode, referenceNode) {
-      if (referenceNode && referenceNode.parentNode !== this) {
-        return originalInsertBefore.call(this, newNode, null);
-      }
-      return originalInsertBefore.call(this, newNode, referenceNode);
-    };
-
-    const originalReplaceChild = proto.replaceChild;
-    proto.replaceChild = function (newChild, oldChild) {
-      if (oldChild.parentNode !== this) {
-        this.appendChild(newChild);
-        return oldChild;
-      }
-      return originalReplaceChild.call(this, newChild, oldChild);
-    };
-  }
-
   function hideCell(cell, reason) {
-    if (!cell || cell.hasAttribute(HIDDEN_ATTR) || !cell.isConnected) return;
+    if (!cell || cell.hasAttribute(HIDDEN_ATTR)) return;
     if (!isSafeToHide(cell)) {
       if (DEBUG) console.warn('[AdVanish] refused to hide (too large / unsafe):', reason, cell);
       return;
     }
     cell.setAttribute(HIDDEN_ATTR, 'true');
+    cell.classList.add('parp-hidden');
     if (DEBUG) {
-      console.debug('[AdVanish] removing cell — reason:', reason, '\ntext:', textOf(cell).slice(0, 200), '\nelement:', cell);
+      console.debug('[AdVanish] hid cell — reason:', reason, '\ntext:', textOf(cell).slice(0, 200), '\nelement:', cell);
     }
-    cell.remove();
   }
 
   // NOTE: we previously dispatched a synthetic window "resize" event here to
@@ -498,11 +454,6 @@
   }
 
   async function init() {
-    // Patch as early as possible (before React starts hydrating), not
-    // gated behind whenPageReady — we want this in place before any
-    // removal happens, and it's a no-op until we actually remove a node.
-    patchNodeRemovalSafety();
-
     settings = await loadSettings();
     if (DEBUG) console.debug('[AdVanish] active settings:', settings);
 

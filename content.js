@@ -165,12 +165,6 @@
       console.debug('[AdVanish] blanking pin — reason:', reason, '\ntext:', textOf(cell).slice(0, 200), '\nelement:', cell);
     }
     cell.querySelectorAll('img, video').forEach((el) => el.remove());
-    // Also clear the title/attribution/"Sponsored" label footer — otherwise
-    // the blanked card still visibly reads as an ad even with no image.
-    // Pinterest's pin footer carries a data-test-id containing "footer"
-    // (e.g. pinrep-footer); matched with a word-ish substring rather than
-    // an exact value since it's consistently named that way across pins.
-    cell.querySelectorAll('[data-test-id*="footer" i]').forEach((el) => el.remove());
   }
 
   // NOTE: we previously dispatched a synthetic window "resize" event here to

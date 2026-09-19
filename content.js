@@ -89,6 +89,48 @@
   // on; it only prints, never changes behavior.
   const DEBUG = true;
 
+  // Content scripts share the actual DOM API objects with the page (only JS
+  // *variables* are isolated, not built-in browser interfaces), so patching
+  // Node.prototype here also affects Pinterest's own code. This makes
+  // removeChild/insertBefore/replaceChild fail gracefully instead of
+  // throwing when React reaches for a node we already removed — cheap
+  // insurance for blankPinCell() below, which does remove real nodes
+  // (img/video), just small leaf ones rather than a whole grid cell.
+  let removalSafetyPatched = false;
+  function patchNodeRemovalSafety() {
+    if (removalSafetyPatched) return;
+    removalSafetyPatched = true;
+
+    const proto = Node.prototype;
+
+    const originalRemoveChild = proto.removeChild;
+    proto.removeChild = function (child) {
+      if (child.parentNode !== this) return child;
+      return originalRemoveChild.call(this, child);
+    };
+
+    const originalInsertBefore = proto.insertBefore;
+    proto.insertBefore = function (newNode, referenceNode) {
+      if (referenceNode && referenceNode.parentNode !== this) {
+        return originalInsertBefore.call(this, newNode, null);
+      }
+      return originalInsertBefore.call(this, newNode, referenceNode);
+    };
+
+    const originalReplaceChild = proto.replaceChild;
+    proto.replaceChild = function (newChild, oldChild) {
+      if (oldChild.parentNode !== this) {
+        this.appendChild(newChild);
+        return oldChild;
+      }
+      return originalReplaceChild.call(this, newChild, oldChild);
+    };
+  }
+
+  // Used for whole-section matches (e.g. the "related pins" module) that
+  // aren't individual masonry grid items — plain display:none is fine here
+  // since these aren't interleaved in the masonry grid, so there's no gap
+  // to worry about.
   function hideCell(cell, reason) {
     if (!cell || cell.hasAttribute(HIDDEN_ATTR)) return;
     if (!isSafeToHide(cell)) {
@@ -102,6 +144,29 @@
     }
   }
 
+  // Used for individual pin matches (ad/video/shoppable/keyword). Pinterest's
+  // Masonry component measures each item's height once at initial render and
+  // documents that it never re-measures after that — so display:none/removal
+  // on the grid cell itself always leaves a gap, because nothing tells
+  // Masonry the cell's footprint should change. The fix (validated against a
+  // real working Pinterest ad-remover, LiveMethod/pinterest-adblock's
+  // detox.js): never touch the grid cell's own box at all. Only remove the
+  // <img>/<video> inside it. Its measured height stays exactly what Masonry
+  // originally computed, so there is structurally nothing to reflow — the
+  // cell just renders as a blank card instead of a gap.
+  function blankPinCell(cell, reason) {
+    if (!cell || cell.hasAttribute(HIDDEN_ATTR)) return;
+    if (!isSafeToHide(cell)) {
+      if (DEBUG) console.warn('[AdVanish] refused to blank (too large / unsafe):', reason, cell);
+      return;
+    }
+    cell.setAttribute(HIDDEN_ATTR, 'true');
+    if (DEBUG) {
+      console.debug('[AdVanish] blanking pin — reason:', reason, '\ntext:', textOf(cell).slice(0, 200), '\nelement:', cell);
+    }
+    cell.querySelectorAll('img, video').forEach((el) => el.remove());
+  }
+
   // NOTE: we previously dispatched a synthetic window "resize" event here to
   // nudge Pinterest's masonry into recomputing layout after hiding a cell.
   // Pinterest's grid is virtualized (it mounts/unmounts pins based on
@@ -109,9 +174,8 @@
   // that virtualization into recalculating constantly — which intermittently
   // unmounted pins that should have stayed visible (seen as a white screen,
   // or a pin vanishing right after a hover-triggered DOM mutation elsewhere
-  // on the page retriggered our scan). Removed entirely: display:none alone
-  // is enough to hide a cell, and any leftover gap is a much smaller problem
-  // than corrupting Pinterest's own rendering.
+  // on the page retriggered our scan). Removed entirely — see blankPinCell()
+  // above for how gaps are now actually avoided, without needing this.
 
   function matchesKeyword(cell) {
     if (!settings.keywords || settings.keywords.length === 0) return false;
@@ -225,10 +289,10 @@
       const cell = findGridCell(marker);
       if (cell.hasAttribute(HIDDEN_ATTR)) return;
 
-      if (settings.hideAds && isPromoted(cell)) return hideCell(cell, 'ad/promoted');
-      if (settings.hideVideoPins && isVideoPin(cell)) return hideCell(cell, 'video pin');
-      if (settings.hideShoppablePins && isShoppablePin(cell)) return hideCell(cell, 'shoppable pin');
-      if (matchesKeyword(cell)) return hideCell(cell, 'keyword match');
+      if (settings.hideAds && isPromoted(cell)) return blankPinCell(cell, 'ad/promoted');
+      if (settings.hideVideoPins && isVideoPin(cell)) return blankPinCell(cell, 'video pin');
+      if (settings.hideShoppablePins && isShoppablePin(cell)) return blankPinCell(cell, 'shoppable pin');
+      if (matchesKeyword(cell)) return blankPinCell(cell, 'keyword match');
 
       cell.setAttribute(SCANNED_ATTR, 'true');
     });
@@ -454,6 +518,11 @@
   }
 
   async function init() {
+    // Patch as early as possible (before React starts hydrating), not
+    // gated behind whenPageReady — it's a no-op until blankPinCell()
+    // actually removes a node.
+    patchNodeRemovalSafety();
+
     settings = await loadSettings();
     if (DEBUG) console.debug('[AdVanish] active settings:', settings);
 

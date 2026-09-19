@@ -37,15 +37,36 @@ the ad element and open an issue with it so the selectors can be tuned.
 
 ## Masonry gap handling
 
-Pinterest positions pins with JS-computed `transform` and virtualizes the
-grid (mounting/unmounting pins based on viewport measurements). Hidden pins
-use plain `display: none`. An earlier version also dispatched a synthetic
-`resize` event to nudge Pinterest into recomputing layout and closing gaps,
-but that repeatedly triggered Pinterest's virtualization logic and caused
-pins to intermittently unmount (visible as a white screen or a pin vanishing
-on hover). That nudge was removed — hidden pins may occasionally leave a
-small gap until the next natural layout pass (e.g. scroll), which is a much
-smaller issue than corrupting Pinterest's own rendering.
+Pinterest's grid is built on their open-source Gestalt design system's
+`Masonry` component. It measures each item's height once at initial render
+and — per Gestalt's own documentation — never re-measures it afterward:
+"Item heights cannot change after their initial render... Masonry will
+never know about the updated item height and remeasure that item, leading
+to overlaps or gaps in the grid." That's an acknowledged limitation of the
+component itself, not something Pinterest added to resist ad blockers.
+
+Earlier approaches tried to work around this by making Pinterest itself
+recompute layout (a synthetic `resize` event) or by removing the grid cell
+outright — both interact with Pinterest's own virtualized/React-managed
+tree and caused real instability (an intermittent white screen; pins
+vanishing on hover-triggered rescans).
+
+The actual fix (validated against a real third-party Pinterest ad remover,
+[LiveMethod/pinterest-adblock](https://github.com/LiveMethod/pinterest-adblock)'s
+`detox.js`): never touch the grid cell's own box. For individual pins
+(ads/video/shoppable/keyword matches), only the `<img>`/`<video>` inside the
+cell is removed — the cell's measured height, set once by Masonry, never
+changes, so there's structurally nothing to reflow. The result is a blank
+card instead of a gap. Whole-section clutter (e.g. the "related pins"
+module) isn't part of the masonry grid, so those are simply hidden with
+`display: none` as before.
+
+A `Node.prototype.removeChild`/`insertBefore`/`replaceChild` patch is
+applied defensively (content scripts share the actual DOM API objects with
+the page, so this affects Pinterest's own code too), making those methods
+fail gracefully instead of throwing if Pinterest's React code ever reaches
+for one of the small removed media nodes — cheap insurance against a crash
+class we hit while testing full-cell removal.
 
 ## Project structure
 

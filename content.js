@@ -171,20 +171,6 @@
     // (e.g. pinrep-footer); matched with a word-ish substring rather than
     // an exact value since it's consistently named that way across pins.
     cell.querySelectorAll('[data-test-id*="footer" i]').forEach((el) => el.remove());
-    // Pinterest sets an inline "dominant color" placeholder background on
-    // the image wrapper (so something reasonable shows while the real image
-    // loads). With the <img> gone, that placeholder color is now the only
-    // thing left visible — a solid colored block. Clear any inline
-    // background so it blends into the page instead of standing out.
-    cell.querySelectorAll('*').forEach((el) => {
-      if (el.style && (el.style.backgroundColor || el.style.background)) {
-        el.style.backgroundColor = '';
-        el.style.background = '';
-      }
-    });
-    cell.style.backgroundColor = '';
-    cell.style.background = '';
-    cell.classList.add('parp-blanked');
   }
 
   // NOTE: we previously dispatched a synthetic window "resize" event here to

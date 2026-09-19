@@ -2,18 +2,6 @@
   display: none !important;
 }
 
-/* A blanked pin (image/video/footer removed) keeps its original box so
-   Pinterest's masonry never needs to reflow it — but Pinterest's own
-   dominant-color placeholder background can still show through from a
-   stylesheet rule, not just inline style. Force it transparent so it
-   blends into the page instead of appearing as a solid colored block. */
-.parp-blanked,
-.parp-blanked * {
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-}
-
 .parp-overlay-floating {
   position: fixed;
   display: flex;

@@ -11,7 +11,7 @@
     const style = document.createElement('style');
     style.id = 'parp-masonry-style';
     style.textContent = `
-      [role="list"] {
+      [role="list"]:has([data-grid-item="true"]) {
         column-count: 4;
         column-gap: 16px;
       }

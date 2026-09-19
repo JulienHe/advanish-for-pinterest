@@ -71,11 +71,22 @@
     return el;
   }
 
-  function hideCell(cell) {
+  // Temporary diagnostic flag — logs *why* each cell was hidden to the
+  // console so we can see the real cause instead of guessing. Safe to leave
+  // on; it only prints, never changes behavior.
+  const DEBUG = true;
+
+  function hideCell(cell, reason) {
     if (!cell || cell.hasAttribute(HIDDEN_ATTR)) return;
-    if (!isSafeToHide(cell)) return;
+    if (!isSafeToHide(cell)) {
+      if (DEBUG) console.warn('[AdVanish] refused to hide (too large / unsafe):', reason, cell);
+      return;
+    }
     cell.setAttribute(HIDDEN_ATTR, 'true');
     cell.classList.add('parp-hidden');
+    if (DEBUG) {
+      console.debug('[AdVanish] hid cell — reason:', reason, '\ntext:', textOf(cell).slice(0, 200), '\nelement:', cell);
+    }
   }
 
   // NOTE: we previously dispatched a synthetic window "resize" event here to
@@ -169,10 +180,10 @@
       const cell = findGridCell(marker);
       if (cell.hasAttribute(HIDDEN_ATTR)) return;
 
-      if (settings.hideAds && isPromoted(cell)) return hideCell(cell);
-      if (settings.hideVideoPins && isVideoPin(cell)) return hideCell(cell);
-      if (settings.hideShoppablePins && isShoppablePin(cell)) return hideCell(cell);
-      if (matchesKeyword(cell)) return hideCell(cell);
+      if (settings.hideAds && isPromoted(cell)) return hideCell(cell, 'ad/promoted');
+      if (settings.hideVideoPins && isVideoPin(cell)) return hideCell(cell, 'video pin');
+      if (settings.hideShoppablePins && isShoppablePin(cell)) return hideCell(cell, 'shoppable pin');
+      if (matchesKeyword(cell)) return hideCell(cell, 'keyword match');
 
       cell.setAttribute(SCANNED_ATTR, 'true');
     });
@@ -181,7 +192,7 @@
       const blocks = root.querySelectorAll('[data-test-id]');
       blocks.forEach((el) => {
         if (el.hasAttribute(HIDDEN_ATTR)) return;
-        if (isSearchSuggestionBlock(el)) hideCell(el);
+        if (isSearchSuggestionBlock(el)) hideCell(el, 'search suggestion block: ' + el.getAttribute('data-test-id'));
       });
     }
   }
@@ -384,6 +395,7 @@
 
   async function init() {
     settings = await loadSettings();
+    if (DEBUG) console.debug('[AdVanish] active settings:', settings);
     applyGridStyle();
     rescanAll();
     startObserving();

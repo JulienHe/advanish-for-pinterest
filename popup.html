@@ -8,47 +8,9 @@
 <body>
   <header>
     <h1>AdVanish <span class="subtitle">for Pinterest</span></h1>
-    <label class="switch">
-      <input type="checkbox" id="enabled" />
-      <span class="slider"></span>
-    </label>
   </header>
-
-  <main id="content">
-    <section>
-      <h2>Hide</h2>
-      <label class="row"><input type="checkbox" id="hideAds" /> Ads &amp; promoted pins</label>
-      <label class="row"><input type="checkbox" id="hideSearchSuggestions" /> Search suggestions &amp; related blocks</label>
-      <label class="row"><input type="checkbox" id="hideVideoPins" /> Video pins</label>
-      <label class="row"><input type="checkbox" id="hideShoppablePins" /> Shoppable pins</label>
-    </section>
-
-    <section>
-      <h2>Keyword filter</h2>
-      <div class="keyword-input-row">
-        <input type="text" id="keywordInput" placeholder="Add a keyword…" />
-        <button id="addKeyword">Add</button>
-      </div>
-      <ul id="keywordList"></ul>
-    </section>
-
-    <section>
-      <h2>Grid layout <span class="badge">experimental</span></h2>
-      <label class="row"><input type="checkbox" id="gridEnabled" /> CSS-columns grid (true zero-gap)</label>
-      <p class="hint">Switches Pinterest's grid to native CSS columns so hidden pins are reflowed by the browser itself. Each column is an exact 100% / count share of the width. Reload the page after enabling.</p>
-      <label class="field">
-        Columns (0 = auto)
-        <input type="number" id="gridColumnCount" min="0" max="10" />
-      </label>
-      <label class="field">
-        Spacing (px)
-        <input type="number" id="gridGap" min="0" max="60" />
-      </label>
-    </section>
+  <main>
+    <p class="hint">Blank slate — no features active yet.</p>
   </main>
-
-  <footer>Reload any open Pinterest tab after changing settings.</footer>
-
-  <script src="popup.js"></script>
 </body>
 </html>

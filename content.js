@@ -41,11 +41,19 @@
 
   // ---------- helpers ----------
 
-  // Use textContent (not innerText) because Pinterest often marks ads with
-  // visually-hidden accessibility text (e.g. sr-only "Promoted by X"), and
-  // innerText deliberately omits hidden text while textContent includes it.
+  // textContent includes hidden/collapsed text (e.g. dropdown menu items
+  // like "Why this ad?" that Pinterest apparently includes in EVERY pin's
+  // options menu, not just actual ads). That made textContent too noisy for
+  // ad-label detection — it false-positived on ordinary pins whose hover
+  // menu happened to be in the DOM. Use visible text (innerText) for
+  // deciding whether something IS an ad; keyword filtering (a deliberate,
+  // user-supplied match) still benefits from the broader textContent.
   function textOf(el) {
     return (el.textContent || '').trim();
+  }
+
+  function visibleTextOf(el) {
+    return (el.innerText || '').trim();
   }
 
   // Walk up from a candidate marker element to the ancestor that represents
@@ -116,13 +124,24 @@
   const AD_LABEL_RE = /\b(promoted|sponsored)\b/i;
 
   function isPromoted(cell) {
-    if (AD_LABEL_RE.test(textOf(cell))) return true;
+    // Visible text only — Pinterest renders the "Sponsored"/"Promoted"
+    // label as plain visible text under the pin. textContent (which
+    // includes hidden text) was matching boilerplate hidden menu items
+    // ("Why this ad?") that exist on every pin's options menu, not just
+    // actual ads.
+    if (AD_LABEL_RE.test(visibleTextOf(cell))) return true;
+    // Visible aria-labels (e.g. on a "Promoted by X" badge) — not hidden
+    // menu boilerplate, so this one is safe to keep text-content based.
     const ariaCandidates = cell.querySelectorAll('[aria-label]');
     for (const node of ariaCandidates) {
-      const label = node.getAttribute('aria-label') || '';
-      if (AD_LABEL_RE.test(label)) return true;
+      if (AD_LABEL_RE.test(node.getAttribute('aria-label') || '')) return true;
     }
-    if (cell.querySelector('[data-test-id*="ad" i]')) return true;
+    // NOTE: previously also checked `[data-test-id*="ad" i]`, which is a
+    // plain substring match — "ad" is a substring of "add", so it matched
+    // the ordinary Save/"Add to board" button that appears in every pin's
+    // hover overlay. That's what made every pin look like an ad on hover.
+    // Removed; if we need a data-test-id-based signal later, it must use a
+    // word-boundary check, not a bare substring.
     return false;
   }
 

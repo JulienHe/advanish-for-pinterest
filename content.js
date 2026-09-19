@@ -35,7 +35,7 @@
     for (const [key, { newValue }] of Object.entries(changes)) {
       settings[key] = newValue;
     }
-    applyGridStyle();
+    applyGridMode();
     rescanAll();
   });
 
@@ -267,10 +267,18 @@
       const cell = findGridCell(marker);
       if (cell.hasAttribute(HIDDEN_ATTR)) return;
 
-      if (settings.hideAds && isPromoted(cell)) return blankPinCell(cell, 'ad/promoted');
-      if (settings.hideVideoPins && isVideoPin(cell)) return blankPinCell(cell, 'video pin');
-      if (settings.hideShoppablePins && isShoppablePin(cell)) return blankPinCell(cell, 'shoppable pin');
-      if (matchesKeyword(cell)) return blankPinCell(cell, 'keyword match');
+      // In CSS-columns mode, grid cells are real in-flow content (no more
+      // Pinterest inline position:absolute/transform — see applyGridMode
+      // below), so a plain display:none actually closes the gap natively,
+      // handled entirely by the browser's own column layout. Outside that
+      // mode, cells are still absolutely positioned by Pinterest's own JS,
+      // so blankPinCell (leave the box, clear its content) is what avoids a
+      // gap there.
+      const hideFn = settings.gridEnabled ? hideCell : blankPinCell;
+      if (settings.hideAds && isPromoted(cell)) return hideFn(cell, 'ad/promoted');
+      if (settings.hideVideoPins && isVideoPin(cell)) return hideFn(cell, 'video pin');
+      if (settings.hideShoppablePins && isShoppablePin(cell)) return hideFn(cell, 'shoppable pin');
+      if (matchesKeyword(cell)) return hideFn(cell, 'keyword match');
 
       cell.setAttribute(SCANNED_ATTR, 'true');
     });
@@ -282,6 +290,12 @@
         if (isSearchSuggestionBlock(el)) hideCell(el, 'search suggestion block: ' + el.getAttribute('data-test-id'));
       });
     }
+
+    // Retry finding the grid container in case it wasn't available yet on
+    // the first call (e.g. pins still loading in) or was replaced by
+    // Pinterest's own client-side navigation. No-op if already applied to
+    // the current container or if the feature is off.
+    applyGridMode();
   }
 
   let rescanScheduled = false;
@@ -434,30 +448,81 @@
     if (existing) existing.remove();
   }
 
-  // ---------- custom grid spacing/column-width (experimental) ----------
-  // Pinterest computes column widths in JS, so this is a best-effort CSS
-  // override on the common pin-wrapper width and card image sizing. It may
-  // stop working if Pinterest changes its layout markup.
+  // ---------- CSS-columns grid mode (experimental) ----------
+  // Pinterest's masonry positions each cell with inline position:absolute +
+  // transform, computed once by its own JS and never revisited (see
+  // blankPinCell's comment) — that's the actual, structural reason hiding a
+  // pin leaves a gap: nothing in that scheme ever reflows automatically.
+  //
+  // Native CSS multi-column layout (`columns` + `column-gap`) solves this
+  // the way it was designed to: browsers reflow column content
+  // automatically on any DOM change, for free, no JS involved. The trick is
+  // getting Pinterest's cells to participate in that layout as normal
+  // in-flow content instead of being absolutely positioned — which we do
+  // with a plain CSS override (`position: static !important` etc. in an
+  // injected stylesheet). Crucially, this never touches the DOM tree, an
+  // element's attributes, or any property React itself set — it only
+  // changes which CSS rule wins the cascade. React's own bookkeeping is
+  // completely unaware anything changed, which is exactly why this
+  // sidesteps every crash class hit earlier this session (all of those
+  // came from mutating nodes/attributes React manages, not from CSS).
+  //
+  // One known risk, not yet resolved: Pinterest's virtualization (mounting/
+  // unmounting off-screen pins) decides what to (un)mount based on ITS OWN
+  // internal position calculations, which this doesn't change — only the
+  // visual result does. If our column fill order diverges enough from
+  // Pinterest's own row-based order, pins could flicker or vanish
+  // unexpectedly while scrolling, since what's visually on screen may not
+  // match what Pinterest's JS believes is on screen. Needs real testing.
 
-  let gridStyleTag = null;
-  function applyGridStyle() {
-    if (!gridStyleTag) {
-      gridStyleTag = document.createElement('style');
-      gridStyleTag.id = 'parp-grid-style';
-      document.documentElement.appendChild(gridStyleTag);
+  let columnsStyleTag = null;
+  let columnsContainer = null;
+
+  function applyGridMode() {
+    if (!columnsStyleTag) {
+      columnsStyleTag = document.createElement('style');
+      columnsStyleTag.id = 'parp-columns-style';
+      document.documentElement.appendChild(columnsStyleTag);
     }
+
     if (!settings.gridEnabled) {
-      gridStyleTag.textContent = '';
+      columnsStyleTag.textContent = '';
+      if (columnsContainer) columnsContainer.classList.remove('parp-columns-active');
+      columnsContainer = null;
       return;
     }
+
+    // Find the shared parent of Pinterest's grid cells. Re-checked on every
+    // call (cheap) since the container may not exist yet at first call, or
+    // may have been replaced by Pinterest's own client-side navigation.
+    const anyCell = document.querySelector('[data-grid-item], [role="listitem"]');
+    const container = anyCell ? anyCell.parentElement : null;
+    if (!container) return; // will retry on the next rescan
+
+    if (columnsContainer && columnsContainer !== container) {
+      columnsContainer.classList.remove('parp-columns-active');
+    }
+    columnsContainer = container;
+    columnsContainer.classList.add('parp-columns-active');
+
     const w = Number(settings.gridColumnWidth) || DEFAULTS.gridColumnWidth;
     const g = Number(settings.gridGap) || DEFAULTS.gridGap;
-    gridStyleTag.textContent = `
-      [data-test-id="pinWrapper"], [data-test-id="pin"] {
-        width: ${w}px !important;
+    columnsStyleTag.textContent = `
+      .parp-columns-active {
+        display: block !important;
+        columns: ${w}px !important;
+        column-gap: ${g}px !important;
       }
-      [data-grid-item] {
-        margin: ${Math.round(g / 2)}px !important;
+      .parp-columns-active > [data-grid-item] {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        transform: none !important;
+        width: 100% !important;
+        margin: 0 0 ${g}px !important;
+        break-inside: avoid;
       }
     `;
   }
@@ -500,7 +565,7 @@
     if (DEBUG) console.debug('[AdVanish] active settings:', settings);
 
     whenPageReady(() => {
-      applyGridStyle();
+      applyGridMode();
       rescanAll();
       startObserving();
       initHoverDelegation();

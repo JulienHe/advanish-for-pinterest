@@ -12,7 +12,8 @@ clutter on Pinterest, while keeping the masonry grid tidy.
 - Custom keyword filter
 - Hover overlay for previewing a pin at full size or downloading the
   original-resolution image
-- Experimental grid column-width / spacing customization
+- Experimental CSS-columns grid mode for genuinely gap-free hiding (see
+  below)
 
 ## Install (unpacked, for development)
 
@@ -51,8 +52,8 @@ outright — both interact with Pinterest's own virtualized/React-managed
 tree and caused real instability (an intermittent white screen; pins
 vanishing on hover-triggered rescans).
 
-The actual fix (validated against a real third-party Pinterest ad remover,
-[LiveMethod/pinterest-adblock](https://github.com/LiveMethod/pinterest-adblock)'s
+The default-mode fix (validated against a real third-party Pinterest ad
+remover, [LiveMethod/pinterest-adblock](https://github.com/LiveMethod/pinterest-adblock)'s
 `detox.js`): never touch the grid cell's own box. For individual pins
 (ads/video/shoppable/keyword matches), only the `<img>`/`<video>` inside the
 cell is removed — the cell's measured height, set once by Masonry, never
@@ -61,12 +62,44 @@ card instead of a gap. Whole-section clutter (e.g. the "related pins"
 module) isn't part of the masonry grid, so those are simply hidden with
 `display: none` as before.
 
-A `Node.prototype.removeChild`/`insertBefore`/`replaceChild` patch is
-applied defensively (content scripts share the actual DOM API objects with
-the page, so this affects Pinterest's own code too), making those methods
-fail gracefully instead of throwing if Pinterest's React code ever reaches
-for one of the small removed media nodes — cheap insurance against a crash
-class we hit while testing full-cell removal.
+(An earlier attempt patched `Node.prototype.removeChild`/`insertBefore`/
+`replaceChild` defensively for a full-cell-removal experiment. That patch
+affects every such call on the page — including Pinterest's own internal
+code for unrelated purposes, since content scripts share the actual DOM API
+objects with the page — and was removed after a white screen appeared
+alongside uncaught errors from Pinterest's own bundle failing to read its
+own internal data, a plausible sign of interference. The current default
+mode doesn't need it.)
+
+### CSS-columns grid mode (experimental, opt-in)
+
+The "Zero-gap custom grid" setting takes a different, structurally simpler
+approach: instead of fighting Pinterest's JS-computed absolute positioning,
+override it with CSS so Pinterest's grid cells become normal in-flow
+content inside a native CSS multi-column layout
+(`columns: <width>; column-gap: <gap>;`). Browsers reflow column content
+automatically on any DOM change — no JS masonry math needed on our side at
+all. With cells back in normal flow, a plain `display: none` on a hidden
+pin genuinely closes the gap, handled entirely by the browser's own layout
+engine.
+
+This is done as a pure CSS override (an injected stylesheet with
+`!important` rules beating Pinterest's plain inline styles) — it never
+mutates the DOM tree, an element's attributes, or any property React itself
+set. React's own bookkeeping is completely unaware anything changed, which
+is why this sidesteps every DOM-mutation-related crash class hit earlier
+this session.
+
+Known open risk: Pinterest's virtualization (mounting/unmounting
+off-screen pins) decides what to (un)mount based on its own internal
+position calculations, which this doesn't change — only the visual result
+does. If the column fill order diverges enough from Pinterest's own
+row-based order, pins could flicker or vanish unexpectedly while scrolling.
+An earlier, much larger approach (a full custom grid renderer mirroring
+non-ad pins into a separate overlay, matching how a real competing
+extension solves this) was tried and reverted for being too unreliable in
+practice (inconsistent columns, ads slipping through) — see git history if
+reviving that direction.
 
 ## Project structure
 

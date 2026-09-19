@@ -53,15 +53,17 @@
   // container carrying role="listitem" or a data-grid-item style attribute
   // that Pinterest's JS positions absolutely. We hide THAT node, not just the
   // inner card, so the whole cell's footprint disappears.
+  // Only climb to an explicit list-item marker, and only a few levels up.
+  // The old fallback (any ancestor with inline position:absolute + a
+  // transform) was too broad: on pages like the single-pin view, it could
+  // match a large wrapper that also contains an unrelated sponsored pin
+  // nearby, causing the wrapper — including the real pin — to be hidden as
+  // if it were the ad. When no explicit list-item marker is found nearby,
+  // stick with the marker itself rather than guessing.
   function findGridCell(el) {
     let node = el;
-    for (let i = 0; i < 8 && node; i++) {
-      if (
-        node.getAttribute &&
-        (node.getAttribute('role') === 'listitem' ||
-          node.hasAttribute('data-grid-item') ||
-          (node.style && node.style.position === 'absolute' && node.style.transform))
-      ) {
+    for (let i = 0; i < 4 && node; i++) {
+      if (node.getAttribute && (node.getAttribute('role') === 'listitem' || node.hasAttribute('data-grid-item'))) {
         return node;
       }
       node = node.parentElement;
@@ -102,14 +104,17 @@
     return settings.keywords.some((kw) => kw && combined.includes(kw.toLowerCase()));
   }
 
+  // Pinterest labels ads "Promoted" in some surfaces and "Sponsored" in
+  // others (observed on search-results feeds). Match both, plus the aria
+  // label variants.
+  const AD_LABEL_RE = /\b(promoted|sponsored)\b/i;
+
   function isPromoted(cell) {
-    // Text-based: Pinterest labels ads "Promoted" / "Promoted by X".
-    if (/\bpromoted\b/i.test(textOf(cell))) return true;
-    // aria-label based signals on badges/links inside the cell.
+    if (AD_LABEL_RE.test(textOf(cell))) return true;
     const ariaCandidates = cell.querySelectorAll('[aria-label]');
     for (const node of ariaCandidates) {
       const label = node.getAttribute('aria-label') || '';
-      if (/promoted/i.test(label)) return true;
+      if (AD_LABEL_RE.test(label)) return true;
     }
     if (cell.querySelector('[data-test-id*="ad" i]')) return true;
     return false;

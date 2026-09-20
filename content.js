@@ -60,12 +60,17 @@
   const placed = new WeakSet();
 
   function initColumns() {
-    container = document.querySelector(GRID_CONTAINER_SELECTOR);
-    if (!container) return false;
+    const found = document.querySelector(GRID_CONTAINER_SELECTOR);
+    if (!found) return false;
 
-    const containerWidth = container.getBoundingClientRect().width;
-    if (!containerWidth) return false;
+    const containerWidth = found.getBoundingClientRect().width;
+    if (!containerWidth) return false; // too early — container not sized yet, retry later
 
+    // Only commit module state once both checks above actually pass —
+    // otherwise `container` could end up set while `columnHeights` stays
+    // null, and the `!container` guard in placeAllUnplaced() would then
+    // never retry initColumns() again, permanently breaking placement.
+    container = found;
     columnWidth = (containerWidth - GAP * (COLUMN_COUNT - 1)) / COLUMN_COUNT;
     columnHeights = new Array(COLUMN_COUNT).fill(0);
     return true;
@@ -103,7 +108,7 @@
   }
 
   function placeAllUnplaced() {
-    if (!container && !initColumns()) return;
+    if (!columnHeights && !initColumns()) return;
 
     const items = container.querySelectorAll(GRID_ITEM_SELECTOR);
     items.forEach(placeItem);

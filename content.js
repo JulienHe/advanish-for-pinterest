@@ -43,6 +43,7 @@
 
   const GRID_ITEM_SELECTOR = '[role="listitem"][data-grid-item="true"]';
   const PIN_ID_SELECTOR = '[data-test-pin-id]';
+  const GRID_CONTAINER_SELECTOR = '[role="list"]:has([data-grid-item="true"])';
 
   function getPinId(gridItem) {
     const marker = gridItem.querySelector(PIN_ID_SELECTOR);
@@ -50,11 +51,16 @@
   }
 
   let scrollAnchor = null;
+  // Paused while a restore is in flight, so the continuous capture below
+  // doesn't overwrite the anchor with a transitional (mid-reflow) position.
+  let restorePending = false;
 
   // Finds whichever visible grid item's bottom edge is closest to (but
   // still within) the viewport bottom, and records how far above the
   // viewport bottom it sits. That distance is what we'll restore later.
   function captureScrollAnchor() {
+    if (restorePending) return;
+
     const items = document.querySelectorAll(GRID_ITEM_SELECTOR);
     let best = null;
 
@@ -92,27 +98,19 @@
     }
   }
 
-  let scrollCaptureScheduled = false;
-  function scheduleScrollCapture() {
-    if (scrollCaptureScheduled) return;
-    scrollCaptureScheduled = true;
-    requestAnimationFrame(() => {
-      scrollCaptureScheduled = false;
-      captureScrollAnchor();
-    });
-  }
-
   let restoreScheduled = false;
   function scheduleScrollRestore() {
     if (restoreScheduled) return;
     restoreScheduled = true;
-    // Wait a frame for the browser to actually finish the column reflow
-    // triggered by the new content before we measure anything — otherwise
-    // we'd read stale (pre-reflow) positions.
+    restorePending = true;
+    // Wait a couple of frames for the browser to actually finish reflow
+    // before measuring anything — otherwise we'd read a transitional
+    // (mid-reflow) position.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        restoreScheduled = false;
         restoreScrollAnchor();
+        restoreScheduled = false;
+        restorePending = false;
       });
     });
   }
@@ -126,18 +124,46 @@
       return;
     }
 
+    // Keep the anchor continuously fresh on an independent timer, NOT tied
+    // to scroll events. New content usually loads *because* the user is
+    // scrolling, so a scroll-triggered capture can race with the very
+    // reflow it's meant to compensate for, sometimes capturing the
+    // already-shifted position. An independent interval sidesteps that.
     captureScrollAnchor();
-    window.addEventListener('scroll', scheduleScrollCapture, { passive: true });
+    setInterval(captureScrollAnchor, 250);
 
-    const observer = new MutationObserver((mutations) => {
+    let resizeObserver = null;
+    let observedContainer = null;
+
+    // Existing pins changing size (e.g. a lazy-loaded image swapping in at
+    // its real aspect ratio) also rebalances columns, with no new nodes
+    // added — a MutationObserver watching for added nodes alone misses
+    // this entirely. ResizeObserver on the grid container catches it.
+    function ensureResizeObserverAttached() {
+      const container = document.querySelector(GRID_CONTAINER_SELECTOR);
+      if (!container || container === observedContainer) return;
+      if (!resizeObserver) {
+        resizeObserver = new ResizeObserver(() => scheduleScrollRestore());
+      }
+      if (observedContainer) resizeObserver.unobserve(observedContainer);
+      resizeObserver.observe(container);
+      observedContainer = container;
+    }
+
+    const mutationObserver = new MutationObserver((mutations) => {
       const addedGridItem = mutations.some((m) =>
         Array.from(m.addedNodes).some(
           (node) => node.nodeType === 1 && (node.matches?.(GRID_ITEM_SELECTOR) || node.querySelector?.(GRID_ITEM_SELECTOR))
         )
       );
-      if (addedGridItem) scheduleScrollRestore();
+      if (addedGridItem) {
+        scheduleScrollRestore();
+        ensureResizeObserverAttached();
+      }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+
+    ensureResizeObserverAttached();
   }
 
   applyMasonryFix();

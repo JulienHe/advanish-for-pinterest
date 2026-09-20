@@ -4,29 +4,40 @@
 // pure CSS override (no DOM/attribute mutation — this is what makes it
 // safe: React's own bookkeeping never sees anything change).
 //
-// Step 2: scroll-anchor compensation. Our container has no fixed height
-// (it must keep growing for infinite scroll), so column-fill stays at its
-// default "balance" — the browser rebalances ALL columns whenever content
-// changes, which can visually shift already-placed pins when new ones load.
-// Rather than try to prevent that reflow (would need a fixed height we
-// can't have), we compensate for it the way a real competing extension
-// does it (researched from its own installed files, reimplemented here
-// independently — see commit message for detail): track a pin near the
-// bottom of the viewport as an "anchor", and after new content loads,
-// re-locate that same pin and adjust scroll position so it lands back
-// exactly where it was. The shift becomes imperceptible even though pins
-// actually moved underneath.
+// Step 2: append-only column filling. column-fill defaults to "balance",
+// which doesn't just append new pins to whichever column is shortest — it
+// recomputes which column EVERY pin belongs to, each time content changes,
+// to keep all columns equal height. That reshuffles pins that were already
+// placed, not just the new ones, which is what caused pins to visibly jump
+// between columns on every scroll-load. column-fill:auto fills columns
+// strictly in DOM order instead (append-only — a new pin can only ever
+// affect the end of the last column), but it only works with an explicit
+// height on the container, which we compute and keep growing ourselves as
+// content loads (see updateColumnHeight below).
+//
+// Step 3: scroll-anchor compensation, for whatever residual shift remains
+// (e.g. right at a column boundary when the tracked height grows). Track a
+// pin near the bottom of the viewport as an "anchor" (researched from a
+// real competing extension's installed files to understand the technique,
+// reimplemented here independently — see commit history), and after
+// content/height changes, re-locate that same pin and adjust scroll
+// position so it lands back exactly where it was.
 
 (() => {
   'use strict';
+
+  const COLUMN_COUNT = 4;
+  const COLUMN_GAP = 16;
 
   function applyMasonryFix() {
     const style = document.createElement('style');
     style.id = 'parp-masonry-style';
     style.textContent = `
       [role="list"]:has([data-grid-item="true"]) {
-        column-count: 4;
-        column-gap: 16px;
+        column-count: ${COLUMN_COUNT};
+        column-gap: ${COLUMN_GAP}px;
+        column-fill: auto;
+        height: var(--parp-col-height, auto);
       }
 
       [role="listitem"][data-grid-item="true"] {
@@ -37,6 +48,37 @@
       }
     `;
     document.documentElement.appendChild(style);
+  }
+
+  // column-fill:auto needs an explicit height to know where to break into
+  // the next column — without one it just dumps everything in column 1.
+  // We approximate "how tall would this be as one column" by summing every
+  // item's own height (regardless of which column it's currently
+  // rendered in — that doesn't matter for this sum) and dividing by the
+  // column count.
+  //
+  // Only ever grows, never shrinks: this feed only adds content, never
+  // removes it, and shrinking the height would force column-fill:auto to
+  // reassign items backwards into earlier columns — exactly the kind of
+  // reshuffle we're trying to eliminate.
+  function updateColumnHeight() {
+    const container = document.querySelector(GRID_CONTAINER_SELECTOR);
+    if (!container) return;
+
+    const items = container.querySelectorAll(GRID_ITEM_SELECTOR);
+    if (!items.length) return;
+
+    let totalHeight = 0;
+    items.forEach((item) => {
+      totalHeight += item.getBoundingClientRect().height + COLUMN_GAP;
+    });
+
+    const targetHeight = Math.ceil(totalHeight / COLUMN_COUNT) + COLUMN_GAP;
+    const current = parseFloat(container.style.getPropertyValue('--parp-col-height')) || 0;
+
+    if (targetHeight > current) {
+      container.style.setProperty('--parp-col-height', `${targetHeight}px`);
+    }
   }
 
   // ---------- scroll-anchor compensation ----------
@@ -103,6 +145,12 @@
     if (restoreScheduled) return;
     restoreScheduled = true;
     restorePending = true;
+
+    // Grow the tracked column height immediately (synchronously) so its
+    // own reflow happens together with whatever content change triggered
+    // this, rather than as a separate, later shift.
+    updateColumnHeight();
+
     // Wait a couple of frames for the browser to actually finish reflow
     // before measuring anything — otherwise we'd read a transitional
     // (mid-reflow) position.
@@ -130,6 +178,7 @@
     // reflow it's meant to compensate for, sometimes capturing the
     // already-shifted position. An independent interval sidesteps that.
     captureScrollAnchor();
+    updateColumnHeight();
     setInterval(captureScrollAnchor, 250);
 
     let resizeObserver = null;

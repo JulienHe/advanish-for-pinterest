@@ -50,8 +50,29 @@
         width: var(--parp-w, auto) !important;
         transform: none !important;
       }
+
+      .parp-ad-hidden {
+        display: none !important;
+      }
     `;
     document.documentElement.appendChild(style);
+  }
+
+  // ---------- ad detection ----------
+  // Visible text only (innerText, not textContent) — textContent includes
+  // hidden/collapsed text, and Pinterest's own pin options menu apparently
+  // includes boilerplate hidden items (e.g. "Why this ad?") on EVERY pin,
+  // not just actual ads, which false-positived when this was tried with
+  // textContent previously.
+  const AD_LABEL_RE = /\b(promoted|sponsored)\b/i;
+
+  function isPromoted(item) {
+    if (AD_LABEL_RE.test(item.innerText || '')) return true;
+    const ariaCandidates = item.querySelectorAll('[aria-label]');
+    for (const node of ariaCandidates) {
+      if (AD_LABEL_RE.test(node.getAttribute('aria-label') || '')) return true;
+    }
+    return false;
   }
 
   let columnHeights = null;
@@ -89,6 +110,16 @@
   function placeItem(item) {
     if (placed.has(item)) return;
     placed.add(item);
+
+    // Skip ads entirely — no column space is ever allocated for them, so
+    // there's nothing to leave a gap. This is only possible because we're
+    // doing placement ourselves now; the earlier CSS-columns version had
+    // to leave a blank card in place since it couldn't control column
+    // height allocation this directly.
+    if (isPromoted(item)) {
+      item.classList.add('parp-ad-hidden');
+      return;
+    }
 
     const height = getItemHeight(item);
 
